@@ -1,24 +1,22 @@
 package com.elmakers.mine.bukkit.utility;
 
-import java.lang.reflect.Method;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.Collection;
-import java.util.Map;
-import java.util.UUID;
-import java.util.logging.Level;
-
+import com.elmakers.mine.bukkit.api.magic.Mage;
 import com.google.common.collect.Multimap;
 import org.bukkit.Bukkit;
-import org.bukkit.DyeColor;
+import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.block.Skull;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.inventory.meta.SkullMeta;
+
+import java.lang.reflect.Method;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.Collection;
+import java.util.UUID;
+import java.util.logging.Level;
 
 public class InventoryUtils extends NMSUtils
 {	
@@ -114,23 +112,12 @@ public class InventoryUtils extends NMSUtils
     @SuppressWarnings("deprecation")
     public static ItemStack getURLSkull(URL url, String ownerName, UUID id, String itemName) {
         ItemStack skull = new ItemStack(Material.SKULL_ITEM, 1, (short)0, (byte)3);
-        if (itemName != null || isLegacy) {
-            if (isLegacy && ownerName == null) {
-                return skull;
-            }
+        if (itemName != null) {
             ItemMeta meta = skull.getItemMeta();
             if (itemName != null) {
                 meta.setDisplayName(itemName);
             }
-            if (isLegacy && meta instanceof SkullMeta) {
-                SkullMeta skullMeta = (SkullMeta)meta;
-                skullMeta.setOwner(ownerName);
-            }
             skull.setItemMeta(meta);
-
-            if (isLegacy) {
-                return skull;
-            }
         }
 
         try {
@@ -158,6 +145,9 @@ public class InventoryUtils extends NMSUtils
     public static String getProfileURL(Object profile)
     {
         String url = null;
+        if (profile == null) {
+            return null;
+        }
         try {
             Multimap<String, Object> properties = (Multimap<String, Object>)class_GameProfile_properties.get(profile);
             Collection<Object> textures = properties.get("textures");
@@ -172,6 +162,10 @@ public class InventoryUtils extends NMSUtils
             ex.printStackTrace();
         }
         return url;
+    }
+
+    public static String getSkullURL(ItemStack skull) {
+        return getProfileURL(getSkullProfile(skull.getItemMeta()));
     }
 
     public static ItemStack getPlayerSkull(String playerName)
@@ -207,7 +201,6 @@ public class InventoryUtils extends NMSUtils
 
     public static Object getSkullProfile(ItemMeta itemMeta)
     {
-        if (isLegacy) return null;
         Object profile = null;
         try {
             if (itemMeta == null || !class_CraftMetaSkull.isInstance(itemMeta)) return null;
@@ -220,7 +213,6 @@ public class InventoryUtils extends NMSUtils
 
     public static boolean setSkullProfile(ItemMeta itemMeta, Object data)
     {
-        if (isLegacy) return false;
         try {
             if (itemMeta == null || !class_CraftMetaSkull.isInstance(itemMeta)) return false;
             class_CraftMetaSkull_profile.set(itemMeta, data);
@@ -242,56 +234,6 @@ public class InventoryUtils extends NMSUtils
         }
     }
 
-    public static Object getBannerPatterns(ItemMeta itemMeta)
-    {
-        if (isLegacy) return null;
-        Object data = null;
-        try {
-            if (itemMeta == null || !class_CraftMetaBanner.isInstance(itemMeta)) return null;
-            data = class_CraftMetaBanner_getPatternsMethod.invoke(itemMeta);
-        } catch (Exception ex) {
-
-        }
-        return data;
-    }
-
-    public static DyeColor getBannerBaseColor(ItemMeta itemMeta)
-    {
-        if (isLegacy) return null;
-        DyeColor color = null;
-        try {
-            if (itemMeta == null || !class_CraftMetaBanner.isInstance(itemMeta)) return null;
-            color = (DyeColor)class_CraftMetaBanner_getBaseColorMethod.invoke(itemMeta);
-        } catch (Exception ex) {
-
-        }
-        return color;
-    }
-
-    public static boolean setBannerPatterns(ItemMeta itemMeta, Object patterns)
-    {
-        if (isLegacy || patterns == null) return false;
-        try {
-            if (itemMeta == null || !class_CraftMetaBanner.isInstance(itemMeta)) return false;
-            class_CraftMetaBanner_setPatternsMethod.invoke(itemMeta, patterns);
-        } catch (Exception ex) {
-            return false;
-        }
-        return true;
-    }
-
-    public static boolean setBannerBaseColor(ItemMeta itemMeta, DyeColor color)
-    {
-        if (isLegacy || color == null) return false;
-        try {
-            if (itemMeta == null || !class_CraftMetaBanner.isInstance(itemMeta)) return false;
-            class_CraftMetaBanner_setBaseColorMethod.invoke(itemMeta, color);
-        } catch (Exception ex) {
-            return false;
-        }
-        return true;
-    }
-
     public static void wrapText(String text, int maxLength, Collection<String> list)
     {
         while (text.length() > maxLength)
@@ -306,5 +248,40 @@ public class InventoryUtils extends NMSUtils
         }
 
         list.add(text);
+    }
+
+    public static boolean hasItem(Mage mage, String itemName) {
+        return hasItem(mage.getInventory(), itemName);
+    }
+
+    public static boolean hasItem(Inventory inventory, String itemName) {
+        if (inventory == null) {
+            return false;
+        }
+        ItemStack[] items = inventory.getContents();
+        for (ItemStack item : items) {
+            if (item != null && item.hasItemMeta()) {
+                String displayName = item.getItemMeta().getDisplayName();
+                if (displayName != null && displayName.equals(itemName)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public static void openSign(Player player, Location signBlock) {
+        if (isLegacy) {
+            return;
+        }
+        try {
+            Object tileEntity = getTileEntity(signBlock);
+            Object playerHandle = getHandle(player);
+            if (tileEntity != null && playerHandle != null) {
+                class_EntityPlayer_openSignMethod.invoke(playerHandle, tileEntity);
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
     }
 }

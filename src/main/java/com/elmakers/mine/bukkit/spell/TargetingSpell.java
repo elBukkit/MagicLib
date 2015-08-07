@@ -42,7 +42,8 @@ public abstract class TargetingSpell extends BaseSpell {
     private List<Target>                        targets                 = null;
     private TargetType							targetType				= TargetType.OTHER;
     private boolean								targetNPCs				= false;
-    private boolean								targetInvisible			= false;
+    private boolean								targetArmorStands		= false;
+    private boolean								targetInvisible			= true;
     private boolean								targetUnknown			= true;
     private boolean                             targetingComplete		= false;
     private boolean                             targetSpaceRequired     = false;
@@ -56,7 +57,15 @@ public abstract class TargetingSpell extends BaseSpell {
     private String								targetLocationWorldName;
     protected Location                          targetLocation2;
     protected double 		                    targetBreakables	    = 0;
-    private Entity								targetEntity = null;
+    private Entity								targetEntity            = null;
+
+    protected float                             distanceWeight          = 1;
+    protected float                             fovWeight               = 4;
+    protected int                               npcWeight               = -1;
+    protected int                               mageWeight              = 5;
+    protected int                               playerWeight            = 4;
+    protected int                               livingEntityWeight      = 3;
+
     private boolean                             bypassProtection        = false;
     private boolean                             checkProtection         = false;
 
@@ -206,9 +215,10 @@ public abstract class TargetingSpell extends BaseSpell {
             location = location.clone();
             location.setY(0);
         }
-        if (location.getBlockY() > location.getWorld().getMaxHeight()) {
+        int maxHeight = CompatibilityUtils.getMaxHeight(location.getWorld());
+        if (location.getBlockY() > maxHeight) {
             location = location.clone();
-            location.setY(location.getWorld().getMaxHeight());
+            location.setY(maxHeight);
         }
 
         try {
@@ -310,7 +320,7 @@ public abstract class TargetingSpell extends BaseSpell {
                         final Location location = getLocation();
                         final Location originLocation = block.getLocation();
                         Vector direction = location.getDirection();
-                        CompatibilityUtils.setDirection(originLocation, direction.multiply(-1));
+                        originLocation.setDirection(direction.multiply(-1));
                         this.location = originLocation;
                         backfire();
                         final Collection<com.elmakers.mine.bukkit.api.effect.EffectPlayer> effects = getEffects("cast");
@@ -496,7 +506,6 @@ public abstract class TargetingSpell extends BaseSpell {
 
     protected Target getEntityTarget()
     {
-        if (targetEntityType == null && targetEntityTypes == null) return null;
         List<Target> scored = getAllTargetEntities();
         if (scored.size() <= 0) return null;
         return scored.get(0);
@@ -545,6 +554,7 @@ public abstract class TargetingSpell extends BaseSpell {
 
             // check for Superprotected Mages
             if (isSuperProtected(entity)) continue;
+
             // Ignore invisible entities
             if (!targetInvisible && entity instanceof LivingEntity && ((LivingEntity)entity).hasPotionEffect(PotionEffectType.INVISIBILITY)) continue;
 
@@ -552,10 +562,16 @@ public abstract class TargetingSpell extends BaseSpell {
             if (useHitbox) {
                 newScore = new Target(sourceLocation, entity, (int)range, useHitbox);
             } else {
-                newScore = new Target(sourceLocation, entity, (int)range, fov, closeRange, closeFOV);
+                newScore = new Target(sourceLocation, entity, (int)range, fov, closeRange, closeFOV,
+                    distanceWeight, fovWeight, mageWeight, npcWeight, playerWeight, livingEntityWeight);
             }
             if (newScore.getScore() > 0)
             {
+                if (mage != null && mage.getDebugLevel() > 1)
+                {
+                    mage.sendMessage("Target " + entity.getType() + ": " + newScore.getScore());
+                }
+
                 targets.add(newScore);
             }
         }
@@ -807,6 +823,12 @@ public abstract class TargetingSpell extends BaseSpell {
         targetBreakables = parameters.getDouble("target_breakables", 0);
         reverseTargeting = parameters.getBoolean("reverse_targeting", false);
 
+        distanceWeight = (float)parameters.getDouble("distance_weight", 1);
+        fovWeight = (float)parameters.getDouble("fov_weight", 4);
+        npcWeight = parameters.getInt("npc_weight", -1);
+        playerWeight = parameters.getInt("player_weight", 4);
+        livingEntityWeight = parameters.getInt("entity_weight", 3);
+
         if (parameters.contains("transparent")) {
             targetThroughMaterials.clear();
             targetThroughMaterials.addAll(controller.getMaterialSet(parameters.getString("transparent")));
@@ -831,7 +853,8 @@ public abstract class TargetingSpell extends BaseSpell {
         }
 
         targetNPCs = parameters.getBoolean("target_npc", false);
-        targetInvisible = parameters.getBoolean("target_invisible", false);
+        targetArmorStands = parameters.getBoolean("target_armor_stand", false);
+        targetInvisible = parameters.getBoolean("target_invisible", true);
         targetUnknown = parameters.getBoolean("target_unknown", true);
 
         if (parameters.contains("target_type")) {
@@ -863,6 +886,7 @@ public abstract class TargetingSpell extends BaseSpell {
                 }
             }
         } else {
+            targetEntityType = null;
             targetEntityTypes = null;
         }
 

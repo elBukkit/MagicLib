@@ -215,8 +215,7 @@ public abstract class BaseShopAction extends BaseSpellAction implements GUIActio
                     }
                 }
                 mage.deactivateGUI();
-                mage.activateGUI(this);
-                mage.getPlayer().openInventory(confirmInventory);
+                mage.activateGUI(this, confirmInventory);
                 return;
             }
 
@@ -391,6 +390,15 @@ public abstract class BaseShopAction extends BaseSpellAction implements GUIActio
         }
 
         if (itemStacks.size() == 0) {
+            Wand wand = mage.getActiveWand();
+            if (wand != null && autoUpgrade) {
+                com.elmakers.mine.bukkit.api.wand.WandUpgradePath path = wand.getPath();
+                WandUpgradePath nextPath = path != null ? path.getUpgrade(): null;
+                if (nextPath != null && path.checkUpgradeRequirements(wand, null) && !path.canEnchant(wand)) {
+                    path.upgrade(wand, mage);
+                    return SpellResult.CAST;
+                }
+            }
             context.sendMessage("no_items");
             return SpellResult.FAIL;
         }
@@ -414,8 +422,7 @@ public abstract class BaseShopAction extends BaseSpellAction implements GUIActio
         {
             displayInventory.addItem(item);
         }
-        mage.activateGUI(this);
-        mage.getPlayer().openInventory(displayInventory);
+        mage.activateGUI(this, displayInventory);
 
         return SpellResult.CAST;
 	}

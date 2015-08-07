@@ -20,6 +20,7 @@ import org.bukkit.util.Vector;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Random;
 
@@ -65,7 +66,7 @@ public class EffectUtils extends NMSUtils {
                 Constructor packetDestroyEntityConstructor = class_PacketPlayOutEntityDestroy.getConstructor(int[].class);
                 Object destroyPacket = packetDestroyEntityConstructor.newInstance(new int[] {(Integer)fireworkId});
 
-                Collection<Player> players = CompatibilityUtils.getOnlinePlayers(server);
+                Collection<? extends Player> players = Arrays.asList(server.getOnlinePlayers());
                 sendPacket(server, location, players, fireworkPacket);
                 sendPacket(server, location, players, metadataPacket);
                 sendPacket(server, location, players, statusPacket);

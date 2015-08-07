@@ -21,6 +21,7 @@ import com.elmakers.mine.bukkit.api.spell.SpellKey;
 import com.elmakers.mine.bukkit.api.spell.SpellResult;
 import com.elmakers.mine.bukkit.api.spell.TargetType;
 import com.elmakers.mine.bukkit.api.wand.Wand;
+import com.elmakers.mine.bukkit.utility.CompatibilityUtils;
 import com.elmakers.mine.bukkit.utility.InventoryUtils;
 import org.apache.commons.lang.ArrayUtils;
 import org.bukkit.Bukkit;
@@ -145,6 +146,7 @@ public abstract class BaseSpell implements MageSpell, Cloneable {
     private List<CastingCost> activeCosts = null;
 
     protected boolean pvpRestricted           	= false;
+    protected boolean disguiseRestricted        = true;
     protected boolean usesBrushSelection        = false;
     protected boolean bypassFriendlyFire    	= false;
     protected boolean bypassPvpRestriction    	= false;
@@ -179,6 +181,8 @@ public abstract class BaseSpell implements MageSpell, Cloneable {
     private int                                 cooldown                = 0;
     private int                                 duration                = 0;
     private long                                lastCast                = 0;
+    private long                                lastActiveCost          = 0;
+    private float                               activeCostScale         = 1;
     private long								castCount				= 0;
 
     private boolean								isActive				= false;
@@ -251,7 +255,7 @@ public abstract class BaseSpell implements MageSpell, Cloneable {
             return false;
         }
 
-        if (block.getY() > block.getWorld().getMaxHeight()) {
+        if (block.getY() > CompatibilityUtils.getMaxHeight(block.getWorld())) {
             return false;
         }
 
@@ -279,7 +283,8 @@ public abstract class BaseSpell implements MageSpell, Cloneable {
 
     public Location tryFindPlaceToStand(Location targetLoc)
     {
-        return tryFindPlaceToStand(targetLoc, targetLoc.getWorld().getMaxHeight(), targetLoc.getWorld().getMaxHeight());
+        int maxHeight = CompatibilityUtils.getMaxHeight(targetLoc.getWorld());
+        return tryFindPlaceToStand(targetLoc, maxHeight, maxHeight);
     }
 
     public Location findPlaceToStand(Location targetLoc)
@@ -297,8 +302,7 @@ public abstract class BaseSpell implements MageSpell, Cloneable {
     {
         if (!targetLoc.getBlock().getChunk().isLoaded()) return null;
         int minY = MIN_Y;
-        int maxY = targetLoc.getWorld().getMaxHeight();
-
+        int maxY = CompatibilityUtils.getMaxHeight(targetLoc.getWorld());
         int targetY = targetLoc.getBlockY();
         if (targetY >= minY && targetY <= maxY && isSafeLocation(targetLoc)) {
             return checkForHalfBlock(targetLoc);
@@ -350,7 +354,7 @@ public abstract class BaseSpell implements MageSpell, Cloneable {
         Location targetLocation = target.clone();
         int yDelta = 0;
         int minY = MIN_Y;
-        int maxY = targetLocation.getWorld().getMaxHeight();
+        int maxY = CompatibilityUtils.getMaxHeight(targetLocation.getWorld());
 
         while (minY <= targetLocation.getY() && targetLocation.getY() <= maxY && yDelta < maxDelta)
         {
@@ -737,16 +741,22 @@ public abstract class BaseSpell implements MageSpell, Cloneable {
     public void checkActiveCosts() {
         if (activeCosts == null) return;
 
+        long now = System.currentTimeMillis();
+        activeCostScale = (float)((double)(now - lastActiveCost) / 1000);
+        lastActiveCost = now;
+
         for (CastingCost cost : activeCosts)
         {
             if (!cost.has(this))
             {
                 deactivate();
-                return;
+                break;
             }
 
             cost.use(this);
         }
+
+        activeCostScale = 1;
     }
 
     public void checkActiveDuration() {
@@ -830,6 +840,7 @@ public abstract class BaseSpell implements MageSpell, Cloneable {
         costs = parseCosts(node.getConfigurationSection("costs"));
         activeCosts = parseCosts(node.getConfigurationSection("active_costs"));
         pvpRestricted = node.getBoolean("pvp_restricted", false);
+        disguiseRestricted = node.getBoolean("disguise_restricted", true);
         usesBrushSelection = node.getBoolean("brush_selection", false);
         castOnNoTarget = node.getBoolean("cast_on_no_target", castOnNoTarget);
         hidden = node.getBoolean("hidden", false);
@@ -885,6 +896,11 @@ public abstract class BaseSpell implements MageSpell, Cloneable {
         }
 
         backfired = false;
+
+        if (!this.isActive)
+        {
+            this.currentCast = null;
+        }
     }
 
     public boolean cast(String[] extraParameters, Location defaultLocation) {
@@ -900,9 +916,10 @@ public abstract class BaseSpell implements MageSpell, Cloneable {
     {
         this.reset();
 
-        if (this.currentCast == null || !this.isActive)
+        if (this.currentCast == null)
         {
-            this.currentCast = new CastContext(this);
+            this.currentCast = new CastContext();
+            this.currentCast.setSpell(this);
         }
 
         if (this.parameters == null) {
@@ -1002,6 +1019,7 @@ public abstract class BaseSpell implements MageSpell, Cloneable {
     public boolean canCast(Location location) {
         if (location == null) return true;
         if (!hasCastPermission(mage.getCommandSender())) return false;
+        if (disguiseRestricted && controller.isDisguised(mage.getEntity())) return false;
         Boolean regionPermission = controller.getRegionCastPermission(mage.getPlayer(), this, location);
         if (regionPermission != null && regionPermission == true) return true;
         Boolean personalPermission = controller.getPersonalCastPermission(mage.getPlayer(), this, location);
@@ -1015,6 +1033,11 @@ public abstract class BaseSpell implements MageSpell, Cloneable {
     @Override
     public boolean isPvpRestricted() {
         return pvpRestricted && !bypassPvpRestriction;
+    }
+
+    @Override
+    public boolean isDisguiseRestricted() {
+        return disguiseRestricted;
     }
 
     @Override
@@ -1422,6 +1445,12 @@ public abstract class BaseSpell implements MageSpell, Cloneable {
         return costReduction + mage.getCostReduction();
     }
 
+    @Override
+    public float getCostScale()
+    {
+        return activeCostScale;
+    }
+
     //
     // Public API Implementation
     //
@@ -1701,10 +1730,16 @@ public abstract class BaseSpell implements MageSpell, Cloneable {
     }
 
     @Override
-    public void reactivate() {
-        isActive = true;
-        onActivate();
+    public void setActive(boolean active) {
+        if (active && !isActive) {
+            onActivate();
+        } else if (!active && isActive) {
+            onDeactivate();
+        }
+        isActive = active;
+        lastActiveCost = System.currentTimeMillis();
     }
+
     @Override
     public void activate() {
         if (!isActive) {
@@ -1751,7 +1786,6 @@ public abstract class BaseSpell implements MageSpell, Cloneable {
             if (category != null && template == null) {
                 category.addCasts(castCount, lastCast);
             }
-            isActive = node.getBoolean("active", false);
             onLoad(node);
         } catch (Exception ex) {
             controller.getPlugin().getLogger().warning("Failed to load data for spell " + name + ": " + ex.getMessage());
@@ -1880,7 +1914,8 @@ public abstract class BaseSpell implements MageSpell, Cloneable {
     @Override
     public com.elmakers.mine.bukkit.api.action.CastContext getCurrentCast() {
         if (currentCast == null) {
-            currentCast = new CastContext(this);
+            currentCast = new CastContext();
+            this.currentCast.setSpell(this);
         }
         return currentCast;
     }

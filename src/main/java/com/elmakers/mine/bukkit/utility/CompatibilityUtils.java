@@ -5,11 +5,12 @@ import org.bukkit.Art;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Color;
-import org.bukkit.DyeColor;
 import org.bukkit.Location;
 import org.bukkit.Rotation;
+import org.bukkit.World;
+import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
-import org.bukkit.block.BlockState;
+import org.bukkit.block.ContainerBlock;
 import org.bukkit.block.Skull;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.InvalidConfigurationException;
@@ -64,26 +65,12 @@ import java.util.logging.Level;
  */
 public class CompatibilityUtils extends NMSUtils {
     public static boolean USE_MAGIC_DAMAGE = true;
+    public static boolean isDamaging = false;
     public final static int MAX_ENTITY_RANGE = 72;
     private final static Map<EntityType, BoundingBox> hitboxes = new HashMap<EntityType, BoundingBox>();
+    private final static Map<World.Environment, Integer> maxHeights = new HashMap<World.Environment, Integer>();
     private static double hitboxScale = 1.0;
     private static BoundingBox defaultHitbox;
-
-    /**
-     * This is shamelessly copied from org.bukkit.Location.setDirection.
-     *
-     * It's only here for 1.6 backwards compatibility.
-     *
-     * This will be removed once there is an RB for 1.7 or 1.8.
-     *
-     * @param location The Location to set the direction of
-     * @param vector the vector to use for the new direction
-     * @return Location the resultant Location (same as location)
-     */
-    @Deprecated
-    public static Location setDirection(Location location, Vector vector) {
-        return location.setDirection(vector);
-    }
 
     public static void applyPotionEffects(LivingEntity entity, Collection<PotionEffect> effects) {
         for (PotionEffect effect: effects) {
@@ -167,11 +154,21 @@ public class CompatibilityUtils extends NMSUtils {
         }
     }
 
+    public static void setSilent(Entity entity, boolean flag) {
+        if (isLegacy) {
+            return;
+        }
+        try {
+            Object handle = getHandle(entity);
+            class_Entity_setSilentMethod.invoke(handle, flag);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+
     public static void removePotionEffect(LivingEntity entity) {
         watch(entity, 7, 0);
     }
-
-
 
     /**
      * Thanks you, Chilinot!
@@ -250,13 +247,9 @@ public class CompatibilityUtils extends NMSUtils {
             location = getPaintingOffset(location, facing, art);
             Object worldHandle = getHandle(location.getWorld());
             Object newEntity = null;
-            if (!isLegacy) {
-                Enum<?> directionEnum = Enum.valueOf(class_EnumDirection, facing.name());
-                Object blockLocation = class_BlockPositionConstructor.newInstance(location.getX(), location.getY(), location.getZ());
-                newEntity = class_EntityPaintingConstructor.newInstance(worldHandle, blockLocation, directionEnum);
-            } else {
-                newEntity = class_EntityPaintingConstructor.newInstance(worldHandle, location.getBlockX(), location.getBlockY(), location.getBlockZ(), getFacing(facing));
-            }
+            Enum<?> directionEnum = Enum.valueOf(class_EnumDirection, facing.name());
+            Object blockLocation = class_BlockPositionConstructor.newInstance(location.getX(), location.getY(), location.getZ());
+            newEntity = class_EntityPaintingConstructor.newInstance(worldHandle, blockLocation, directionEnum);
             if (newEntity != null) {
                 Entity bukkitEntity = getBukkitEntity(newEntity);
                 if (bukkitEntity == null || !(bukkitEntity instanceof Painting)) return null;
@@ -279,13 +272,9 @@ public class CompatibilityUtils extends NMSUtils {
         try {
             Object worldHandle = getHandle(location.getWorld());
             Object newEntity = null;
-            if (!isLegacy) {
-                Enum<?> directionEnum = Enum.valueOf(class_EnumDirection, facing.name());
-                Object blockLocation = class_BlockPositionConstructor.newInstance(location.getX(), location.getY(), location.getZ());
-                newEntity = class_EntityItemFrameConstructor.newInstance(worldHandle, blockLocation, directionEnum);
-            } else {
-                newEntity = class_EntityItemFrameConstructor.newInstance(worldHandle, location.getBlockX(), location.getBlockY(), location.getBlockZ(), getFacing(facing));
-            }
+            Enum<?> directionEnum = Enum.valueOf(class_EnumDirection, facing.name());
+            Object blockLocation = class_BlockPositionConstructor.newInstance(location.getX(), location.getY(), location.getZ());
+            newEntity = class_EntityItemFrameConstructor.newInstance(worldHandle, blockLocation, directionEnum);
             if (newEntity != null) {
                 Entity bukkitEntity = getBukkitEntity(newEntity);
                 if (bukkitEntity == null || !(bukkitEntity instanceof ItemFrame)) return null;
@@ -444,13 +433,20 @@ public class CompatibilityUtils extends NMSUtils {
             // Might need to config-drive this, or just go back to defaulting to normal damage
             if (!USE_MAGIC_DAMAGE || target instanceof Witch || target instanceof Enderman)
             {
-                target.damage(amount, source);
+                isDamaging = true;
+                try {
+                    target.damage(amount, source);
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                }
+                isDamaging = false;
                 return;
             }
 
             Object targetHandle = getHandle(target);
             if (targetHandle == null) return;
 
+            isDamaging = true;
             Object sourceHandle = getHandle(source);
 
             // Bukkit won't allow magic damage from anything but a potion..
@@ -468,9 +464,7 @@ public class CompatibilityUtils extends NMSUtils {
 
                 // This is a bit of hack that lets us damage the ender dragon, who is a weird and annoying collection
                 // of various non-living entity pieces.
-                if (!isLegacy) {
-                    class_EntityDamageSource_setThornsMethod.invoke(damageSource);
-                }
+                class_EntityDamageSource_setThornsMethod.invoke(damageSource);
 
                 class_EntityLiving_damageEntityMethod.invoke(targetHandle, damageSource, (float)amount);
             } else {
@@ -480,6 +474,7 @@ public class CompatibilityUtils extends NMSUtils {
         } catch (Exception ex) {
             ex.printStackTrace();
         }
+        isDamaging = false;
     }
 
     @Deprecated
@@ -500,7 +495,6 @@ public class CompatibilityUtils extends NMSUtils {
 
     public static Object getSkullProfile(Skull state)
     {
-        if (isLegacy) return null;
         Object profile = null;
         try {
             if (state == null || !class_CraftSkull.isInstance(state)) return false;
@@ -513,7 +507,6 @@ public class CompatibilityUtils extends NMSUtils {
 
     public static boolean setSkullProfile(Skull state, Object data)
     {
-        if (isLegacy) return false;
         try {
             if (state == null || !class_CraftSkull.isInstance(state)) return false;
             class_CraftSkull_profile.set(state, data);
@@ -540,57 +533,6 @@ public class CompatibilityUtils extends NMSUtils {
     public static boolean setSkullOwner(Skull state, Player owner)
     {
         return setSkullOwner(state, owner.getName(), owner.getUniqueId());
-    }
-
-    public static Object getBannerPatterns(BlockState state)
-    {
-        if (isLegacy) return null;
-        Object data = null;
-        try {
-            if (state == null || !class_CraftBanner.isInstance(state)) return null;
-            data = class_CraftBanner_getPatternsMethod.invoke(state);
-        } catch (Exception ex) {
-
-        }
-        return data;
-    }
-
-    public static DyeColor getBannerBaseColor(BlockState state)
-    {
-        if (isLegacy) return null;
-        DyeColor color = null;
-        try {
-            if (state == null || !class_CraftBanner.isInstance(state)) return null;
-            color = (DyeColor)class_CraftBanner_getBaseColorMethod.invoke(state);
-        } catch (Exception ex) {
-
-        }
-        return color;
-    }
-
-    public static boolean setBannerPatterns(BlockState state, Object patterns)
-    {
-        if (isLegacy || patterns == null) return false;
-        Object data = null;
-        try {
-            if (state == null || !class_CraftBanner.isInstance(state)) return false;
-            data = class_CraftBanner_setPatternsMethod.invoke(state, patterns);
-        } catch (Exception ex) {
-            return false;
-        }
-        return true;
-    }
-
-    public static boolean setBannerBaseColor(BlockState state, DyeColor color)
-    {
-        if (isLegacy || color == null) return false;
-        try {
-            if (state == null || !class_CraftBanner.isInstance(state)) return false;
-            color = (DyeColor)class_CraftBanner_setBaseColorMethod.invoke(state, color);
-        } catch (Exception ex) {
-            return false;
-        }
-        return true;
     }
 
     public static ConfigurationSection loadConfiguration(String fileName) throws IOException, InvalidConfigurationException
@@ -660,25 +602,22 @@ public class CompatibilityUtils extends NMSUtils {
             return hitbox.center(entity.getLocation().toVector());
         }
 
-        if (!isLegacy)
-        {
-            try {
-                Object entityHandle = getHandle(entity);
-                Object aabb = class_Entity_getBoundingBox.invoke(entityHandle);
-                if (aabb == null) {
-                    return defaultHitbox.center(entity.getLocation().toVector());
-                }
-                return new BoundingBox(
-                        class_AxisAlignedBB_minXField.getDouble(aabb),
-                        class_AxisAlignedBB_maxXField.getDouble(aabb),
-                        class_AxisAlignedBB_minYField.getDouble(aabb),
-                        class_AxisAlignedBB_maxYField.getDouble(aabb),
-                        class_AxisAlignedBB_minZField.getDouble(aabb),
-                        class_AxisAlignedBB_maxZField.getDouble(aabb)
-                ).scale(hitboxScale);
-            } catch (Exception ex) {
-                ex.printStackTrace();
+        try {
+            Object entityHandle = getHandle(entity);
+            Object aabb = class_Entity_getBoundingBox.invoke(entityHandle);
+            if (aabb == null) {
+                return defaultHitbox.center(entity.getLocation().toVector());
             }
+            return new BoundingBox(
+                    class_AxisAlignedBB_minXField.getDouble(aabb),
+                    class_AxisAlignedBB_maxXField.getDouble(aabb),
+                    class_AxisAlignedBB_minYField.getDouble(aabb),
+                    class_AxisAlignedBB_maxYField.getDouble(aabb),
+                    class_AxisAlignedBB_minZField.getDouble(aabb),
+                    class_AxisAlignedBB_maxZField.getDouble(aabb)
+            ).scale(hitboxScale);
+        } catch (Exception ex) {
+            ex.printStackTrace();
         }
         return defaultHitbox.center(entity.getLocation().toVector());
     }
@@ -712,11 +651,11 @@ public class CompatibilityUtils extends NMSUtils {
         }
     }
 
-    public static boolean setLock(Location location, String lockName)
+    public static boolean setLock(Block block, String lockName)
     {
-        if (isLegacy) return false;
-        Object tileEntity = getTileEntity(location);
+        Object tileEntity = getTileEntity(block.getLocation());
         if (tileEntity == null) return false;
+        if (!class_TileEntityContainer.isInstance(tileEntity)) return false;
         try {
             Object lock = class_ChestLock_Constructor.newInstance(lockName);
             class_TileEntityContainer_setLock.invoke(tileEntity, lock);
@@ -728,11 +667,11 @@ public class CompatibilityUtils extends NMSUtils {
         return true;
     }
 
-    public static boolean clearLock(Location location)
+    public static boolean clearLock(Block block)
     {
-        if (isLegacy) return false;
-        Object tileEntity = getTileEntity(location);
+        Object tileEntity = getTileEntity(block.getLocation());
         if (tileEntity == null) return false;
+        if (!class_TileEntityContainer.isInstance(tileEntity)) return false;
         try {
             class_TileEntityContainer_setLock.invoke(tileEntity, new Object[] {null});
         } catch (Exception ex) {
@@ -743,11 +682,11 @@ public class CompatibilityUtils extends NMSUtils {
         return true;
     }
 
-    public static boolean isLocked(Location location)
+    public static boolean isLocked(Block block)
     {
-        if (isLegacy) return false;
-        Object tileEntity = getTileEntity(location);
+        Object tileEntity = getTileEntity(block.getLocation());
         if (tileEntity == null) return false;
+        if (!class_TileEntityContainer.isInstance(tileEntity)) return false;
         try {
             Object lock = class_TileEntityContainer_getLock.invoke(tileEntity);
             if (lock == null) return false;
@@ -758,6 +697,21 @@ public class CompatibilityUtils extends NMSUtils {
         return false;
     }
 
+    public static String getLock(Block block)
+    {
+        Object tileEntity = getTileEntity(block.getLocation());
+        if (tileEntity == null) return null;
+        if (!class_TileEntityContainer.isInstance(tileEntity)) return null;
+        try {
+            Object lock = class_TileEntityContainer_getLock.invoke(tileEntity);
+            if (lock == null) return null;
+            return (String)class_ChestLock_getString.invoke(lock);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+        return null;
+    }
+
     public static void setFallingBlockDamage(FallingBlock entity, float fallHurtAmount, int fallHurtMax)
     {
         Object entityHandle = getHandle(entity);
@@ -766,6 +720,56 @@ public class CompatibilityUtils extends NMSUtils {
             class_EntityFallingBlock_hurtEntitiesField.set(entityHandle, true);
             class_EntityFallingBlock_fallHurtAmountField.set(entityHandle, fallHurtAmount);
             class_EntityFallingBlock_fallHurtMaxField.set(entityHandle, fallHurtMax);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+
+    public static void configureMaxHeights(ConfigurationSection config) {
+        maxHeights.clear();
+        Collection<String> keys = config.getKeys(false);
+        for (String key : keys) {
+            try {
+                World.Environment worldType = World.Environment.valueOf(key.toUpperCase());
+                if (worldType != null)
+                {
+                    maxHeights.put(worldType, config.getInt(key));
+                }
+            } catch (Exception ex) {
+                org.bukkit.Bukkit.getLogger().log(Level.WARNING, "Invalid environment type: " + key, ex);
+            }
+        }
+    }
+
+    public static int getMaxHeight(World world) {
+        Integer maxHeight = maxHeights.get(world.getEnvironment());
+        if (maxHeight == null) {
+            maxHeight = world.getMaxHeight();
+        }
+        return maxHeight;
+    }
+
+    public static void setYawPitch(Entity entity, float yaw, float pitch) {
+        if (isLegacy) {
+            Location location = entity.getLocation();
+            location.setYaw(yaw);
+            location.setPitch(pitch);
+            entity.teleport(location);
+            return;
+        }
+        try {
+            Object handle = getHandle(entity);
+            class_Entity_setYawPitchMethod.invoke(handle, yaw, pitch);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+
+    public static void addFlightExemption(Player player, int ticks) {
+        try {
+            Object handle = getHandle(player);
+            Object connection = class_EntityPlayer_playerConnectionField.get(handle);
+            class_PlayerConnection_floatCountField.set(connection, -ticks);
         } catch (Exception ex) {
             ex.printStackTrace();
         }

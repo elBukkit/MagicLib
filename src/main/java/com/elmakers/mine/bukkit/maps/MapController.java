@@ -38,7 +38,7 @@ public class MapController implements com.elmakers.mine.bukkit.api.maps.MapContr
 
     // Public API
     @Override
-    public Collection<com.elmakers.mine.bukkit.api.maps.URLMap> getAll() {
+    public List<com.elmakers.mine.bukkit.api.maps.URLMap> getAll() {
         return new ArrayList<com.elmakers.mine.bukkit.api.maps.URLMap>(idMap.values());
     }
 
@@ -116,6 +116,7 @@ public class MapController implements com.elmakers.mine.bukkit.api.maps.MapContr
         }
     }
 
+    @Override
     public void save() {
         save(true);
     }
@@ -170,9 +171,7 @@ public class MapController implements com.elmakers.mine.bukkit.api.maps.MapContr
         if (configurationFile == null || disabled) return;
         if (asynchronous && (saveTask != null || plugin == null)) return;
 
-        final List<URLMap> saveMaps = new ArrayList<URLMap>(idMap.values());
         Runnable runnable = new SaveRunnable(idMap.values());
-
         if (asynchronous) {
             saveTask = Bukkit.getScheduler().runTaskAsynchronously(plugin, runnable);
         } else {

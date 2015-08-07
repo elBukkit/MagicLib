@@ -29,6 +29,7 @@ public class EntityData implements com.elmakers.mine.bukkit.api.entity.EntityDat
 
     protected WeakReference<Entity> entity = null;
     protected UUID uuid = null;
+    protected EntityExtraData extraData;
     protected Location location;
     protected Vector relativeLocation;
     protected boolean hasMoved = false;
@@ -42,6 +43,7 @@ public class EntityData implements com.elmakers.mine.bukkit.api.entity.EntityDat
     protected double health = 1;
     protected boolean isBaby;
     protected int fireTicks;
+    protected int airLevel;
     protected DyeColor dyeColor;
     protected Horse.Color horseColor;
     protected Horse.Variant horseVariant;
@@ -93,6 +95,7 @@ public class EntityData implements com.elmakers.mine.bukkit.api.entity.EntityDat
             name = li.getCustomName();
             this.health = li.getHealth();
             this.potionEffects = li.getActivePotionEffects();
+            this.airLevel = li.getRemainingAir();
         }
 
         if (entity instanceof Ageable) {
@@ -272,6 +275,10 @@ public class EntityData implements com.elmakers.mine.bukkit.api.entity.EntityDat
     public boolean modify(Entity entity) {
         if (entity == null || entity.getType() != type) return false;
 
+        if (extraData != null) {
+            extraData.apply(entity);
+        }
+
         entity.setFireTicks(fireTicks);
         if (entity instanceof Ageable) {
             Ageable ageable = (Ageable)entity;
@@ -338,6 +345,7 @@ public class EntityData implements com.elmakers.mine.bukkit.api.entity.EntityDat
 
             try {
                 li.setHealth(Math.min(health, li.getMaxHealth()));
+                li.setRemainingAir(Math.min(airLevel, li.getRemainingAir()));
             } catch (Throwable ex) {
             }
         }
@@ -389,5 +397,11 @@ public class EntityData implements com.elmakers.mine.bukkit.api.entity.EntityDat
         }
 
         return null;
+    }
+
+    public void removed(Entity entity) {
+        if (extraData != null) {
+            extraData.removed(entity);
+        }
     }
 }

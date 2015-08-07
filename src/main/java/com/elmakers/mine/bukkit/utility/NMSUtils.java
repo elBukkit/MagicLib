@@ -12,6 +12,7 @@ import java.util.Collection;
 import java.util.List;
 
 import com.elmakers.mine.bukkit.block.Schematic;
+import org.apache.commons.lang.ArrayUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.DyeColor;
 import org.bukkit.Location;
@@ -91,6 +92,7 @@ public class NMSUtils {
     protected static Class<?> class_BlockPosition;
     protected static Class<?> class_NBTCompressedStreamTools;
     protected static Class<?> class_TileEntity;
+    protected static Class<?> class_TileEntitySign;
     protected static Class<?> class_TileEntityContainer;
     protected static Class<?> class_ChestLock;
     protected static Class<Enum> class_EnumDirection;
@@ -103,6 +105,13 @@ public class NMSUtils {
     protected static Class<?> class_PacketPlayOutEntityMetadata;
     protected static Class<?> class_PacketPlayOutEntityStatus;
     protected static Class<?> class_EntityFallingBlock;
+    protected static Class<?> class_EntityArmorStand;
+    protected static Class<?> class_EntityPlayer;
+    protected static Class<?> class_PlayerConnection;
+    protected static Class<?> class_Chunk;
+    protected static Class<?> class_CraftPlayer;
+    protected static Class<?> class_CraftChunk;
+    protected static Class<?> class_CraftEntity;
 
     protected static Method class_NBTTagList_addMethod;
     protected static Method class_NBTTagList_getMethod;
@@ -111,6 +120,8 @@ public class NMSUtils {
     protected static Method class_NBTTagCompound_setMethod;
     protected static Method class_DataWatcher_watchMethod;
     protected static Method class_World_getEntitiesMethod;
+    protected static Method class_Entity_setSilentMethod;
+    protected static Method class_Entity_setYawPitchMethod;
     protected static Method class_Entity_getBukkitEntityMethod;
     protected static Method class_EntityLiving_damageEntityMethod;
     protected static Method class_DamageSource_getMagicSourceMethod;
@@ -156,6 +167,17 @@ public class NMSUtils {
     protected static Method class_TileEntityContainer_setLock;
     protected static Method class_TileEntityContainer_getLock;
     protected static Method class_ChestLock_isEmpty;
+    protected static Method class_ChestLock_getString;
+    protected static Method class_ArmorStand_setInvisible;
+    protected static Method class_ArmorStand_setMarker;
+    protected static Method class_ArmorStand_setGravity;
+    protected static Method class_ArmorStand_setSmall;
+    protected static Method class_CraftPlayer_getHandleMethod;
+    protected static Method class_CraftChunk_getHandleMethod;
+    protected static Method class_CraftEntity_getHandleMethod;
+    protected static Method class_CraftLivingEntity_getHandleMethod;
+    protected static Method class_CraftWorld_getHandleMethod;
+    protected static Method class_EntityPlayer_openSignMethod;
 
     protected static Constructor class_NBTTagList_consructor;
     protected static Constructor class_NBTTagList_legacy_consructor;
@@ -197,6 +219,11 @@ public class NMSUtils {
     protected static Field class_EntityFallingBlock_hurtEntitiesField;
     protected static Field class_EntityFallingBlock_fallHurtMaxField;
     protected static Field class_EntityFallingBlock_fallHurtAmountField;
+    protected static Field class_EntityArmorStand_disabledSlotsField;
+    protected static Field class_EntityPlayer_playerConnectionField;
+    protected static Field class_PlayerConnection_floatCountField;
+    protected static Field class_Chunk_doneField;
+    protected static Field class_CraftItemStack_getHandleField;
 
     static
     {
@@ -251,6 +278,13 @@ public class NMSUtils {
             class_PacketPlayOutEntityMetadata = fixBukkitClass("net.minecraft.server.PacketPlayOutEntityMetadata");
             class_PacketPlayOutEntityStatus = fixBukkitClass("net.minecraft.server.PacketPlayOutEntityStatus");
             class_EntityFallingBlock = fixBukkitClass("net.minecraft.server.EntityFallingBlock");
+            class_EntityPlayer = fixBukkitClass("net.minecraft.server.EntityPlayer");
+            class_PlayerConnection = fixBukkitClass("net.minecraft.server.PlayerConnection");
+            class_Chunk = fixBukkitClass("net.minecraft.server.Chunk");
+            class_CraftPlayer = fixBukkitClass("org.bukkit.craftbukkit.entity.CraftPlayer");
+            class_CraftChunk = fixBukkitClass("org.bukkit.craftbukkit.CraftChunk");
+            class_CraftEntity = fixBukkitClass("org.bukkit.craftbukkit.entity.CraftEntity");
+            class_TileEntitySign = fixBukkitClass("net.minecraft.server.TileEntitySign");
 
             class_NBTTagList_addMethod = class_NBTTagList.getMethod("add", class_NBTBase);
             class_NBTTagList_getMethod = class_NBTTagList.getMethod("get", Integer.TYPE);
@@ -291,6 +325,11 @@ public class NMSUtils {
             class_Entity_getIdMethod = class_Entity.getMethod("getId");
             class_Entity_getDataWatcherMethod = class_Entity.getMethod("getDataWatcher");
             class_Server_getOnlinePlayers = Server.class.getMethod("getOnlinePlayers");
+            class_CraftPlayer_getHandleMethod = class_CraftPlayer.getMethod("getHandle");
+            class_CraftChunk_getHandleMethod = class_CraftChunk.getMethod("getHandle");
+            class_CraftEntity_getHandleMethod = class_CraftEntity.getMethod("getHandle");
+            class_CraftLivingEntity_getHandleMethod = class_CraftLivingEntity.getMethod("getHandle");
+            class_CraftWorld_getHandleMethod = class_CraftWorld.getMethod("getHandle");
 
             class_CraftInventoryCustom_constructor = class_CraftInventoryCustom.getConstructor(InventoryHolder.class, Integer.TYPE, String.class);
             class_EntityFireworkConstructor = class_EntityFirework.getConstructor(class_World, Double.TYPE, Double.TYPE, Double.TYPE, class_ItemStack);
@@ -319,6 +358,9 @@ public class NMSUtils {
             class_AxisAlignedBB_maxXField = class_AxisAlignedBB.getField("d");
             class_AxisAlignedBB_maxYField = class_AxisAlignedBB.getField("e");
             class_AxisAlignedBB_maxZField = class_AxisAlignedBB.getField("f");
+            class_EntityPlayer_playerConnectionField = class_EntityPlayer.getDeclaredField("playerConnection");
+            class_PlayerConnection_floatCountField = class_PlayerConnection.getDeclaredField("g");
+            class_PlayerConnection_floatCountField.setAccessible(true);
 
             class_Firework_ticksFlownField = class_EntityFirework.getDeclaredField("ticksFlown");
             class_Firework_ticksFlownField.setAccessible(true);
@@ -340,6 +382,11 @@ public class NMSUtils {
             class_EntityFallingBlock_fallHurtMaxField = class_EntityFallingBlock.getDeclaredField("fallHurtMax");
             class_EntityFallingBlock_fallHurtMaxField.setAccessible(true);
 
+            class_Chunk_doneField = class_Chunk.getDeclaredField("done");
+            class_Chunk_doneField.setAccessible(true);
+            class_CraftItemStack_getHandleField = class_CraftItemStack.getDeclaredField("handle");
+            class_CraftItemStack_getHandleField.setAccessible(true);
+
             isLegacy = false;
             try {
                 class_TileEntityContainer = fixBukkitClass("net.minecraft.server.TileEntityContainer");
@@ -347,6 +394,7 @@ public class NMSUtils {
                 class_TileEntityContainer_setLock = class_TileEntityContainer.getMethod("a", class_ChestLock);
                 class_TileEntityContainer_getLock = class_TileEntityContainer.getMethod("i");
                 class_ChestLock_isEmpty = class_ChestLock.getMethod("a");
+                class_ChestLock_getString = class_ChestLock.getMethod("b");
                 class_Entity_getBoundingBox = class_Entity.getMethod("getBoundingBox");
                 class_GameProfile = getClass("com.mojang.authlib.GameProfile");
                 class_GameProfileProperty = getClass("com.mojang.authlib.properties.Property");
@@ -358,6 +406,15 @@ public class NMSUtils {
                 class_GameProfile_properties.setAccessible(true);
                 class_GameProfileProperty_value = class_GameProfileProperty.getDeclaredField("value");
                 class_GameProfileProperty_value.setAccessible(true);
+
+                class_EntityArmorStand = fixBukkitClass("net.minecraft.server.EntityArmorStand");
+                class_ArmorStand_setInvisible = class_EntityArmorStand.getDeclaredMethod("setInvisible", Boolean.TYPE);
+                class_ArmorStand_setGravity = class_EntityArmorStand.getDeclaredMethod("setGravity", Boolean.TYPE);
+                class_ArmorStand_setSmall = class_EntityArmorStand.getDeclaredMethod("setSmall", Boolean.TYPE);
+                class_ArmorStand_setMarker = class_EntityArmorStand.getDeclaredMethod("n", Boolean.TYPE);
+                class_ArmorStand_setMarker.setAccessible(true);
+                class_EntityArmorStand_disabledSlotsField = class_EntityArmorStand.getDeclaredField("bi");
+                class_EntityArmorStand_disabledSlotsField.setAccessible(true);
 
                 class_CraftMetaBanner = fixBukkitClass("org.bukkit.craftbukkit.inventory.CraftMetaBanner");
                 class_CraftMetaBanner_getBaseColorMethod = class_CraftMetaBanner.getMethod("getBaseColor");
@@ -373,11 +430,16 @@ public class NMSUtils {
                 class_EntityDamageSource_setThornsMethod = class_EntityDamageSource.getMethod("v");
 
                 class_BlockPosition = fixBukkitClass("net.minecraft.server.BlockPosition");
-                class_EnumDirection = (Class<Enum>)fixBukkitClass("net.minecraft.server.EnumDirection");
+                class_EnumDirection = (Class<Enum>) fixBukkitClass("net.minecraft.server.EnumDirection");
                 class_BlockPositionConstructor = class_BlockPosition.getConstructor(Double.TYPE, Double.TYPE, Double.TYPE);
                 class_EntityPaintingConstructor = class_EntityPainting.getConstructor(class_World, class_BlockPosition, class_EnumDirection);
                 class_EntityItemFrameConstructor = class_EntityItemFrame.getConstructor(class_World, class_BlockPosition, class_EnumDirection);
                 class_ChestLock_Constructor = class_ChestLock.getConstructor(String.class);
+
+                class_Entity_setYawPitchMethod = class_Entity.getDeclaredMethod("setYawPitch", Float.TYPE, Float.TYPE);
+                class_Entity_setYawPitchMethod.setAccessible(true);
+                class_Entity_setSilentMethod = class_Entity.getDeclaredMethod("b", Boolean.TYPE);
+                class_EntityPlayer_openSignMethod = class_EntityPlayer.getMethod("openSign", class_TileEntitySign);
             }
             catch (Throwable legacy) {
                 isLegacy = true;
@@ -447,9 +509,7 @@ public class NMSUtils {
     public static Object getHandle(org.bukkit.inventory.ItemStack stack) {
         Object handle = null;
         try {
-            Field handleField = stack.getClass().getDeclaredField("handle");
-            handleField.setAccessible(true);
-            handle = handleField.get(stack);
+            handle = class_CraftItemStack_getHandleField.get(stack);
         } catch (Throwable ex) {
             handle = null;
         }
@@ -460,8 +520,7 @@ public class NMSUtils {
         if (world == null) return null;
         Object handle = null;
         try {
-            Method handleMethod = world.getClass().getMethod("getHandle");
-            handle = handleMethod.invoke(world);
+            handle = class_CraftWorld_getHandleMethod.invoke(world);
         } catch (Throwable ex) {
             ex.printStackTrace();
         }
@@ -472,8 +531,7 @@ public class NMSUtils {
         if (entity == null) return null;
         Object handle = null;
         try {
-            Method handleMethod = entity.getClass().getMethod("getHandle");
-            handle = handleMethod.invoke(entity);
+            handle = class_CraftEntity_getHandleMethod.invoke(entity);
         } catch (Throwable ex) {
             ex.printStackTrace();
         }
@@ -484,8 +542,7 @@ public class NMSUtils {
         if (entity == null) return null;
         Object handle = null;
         try {
-            Method handleMethod = entity.getClass().getMethod("getHandle");
-            handle = handleMethod.invoke(entity);
+            handle = class_CraftLivingEntity_getHandleMethod.invoke(entity);
         } catch (Throwable ex) {
             ex.printStackTrace();
         }
@@ -496,9 +553,7 @@ public class NMSUtils {
         Object chunkHandle = getHandle(chunk);
         boolean done = false;
         try {
-            Field doneField = chunkHandle.getClass().getDeclaredField("done");
-            doneField.setAccessible(true);
-            done = (Boolean)doneField.get(chunkHandle);
+            done = (Boolean)class_Chunk_doneField.get(chunkHandle);
         } catch (Throwable ex) {
             ex.printStackTrace();
         }
@@ -508,8 +563,7 @@ public class NMSUtils {
     public static Object getHandle(org.bukkit.Chunk chunk) {
         Object handle = null;
         try {
-            Method handleMethod = chunk.getClass().getMethod("getHandle");
-            handle = handleMethod.invoke(chunk);
+            handle = class_CraftChunk_getHandleMethod.invoke(chunk);
         } catch (Throwable ex) {
             ex.printStackTrace();
         }
@@ -519,27 +573,17 @@ public class NMSUtils {
     public static Object getHandle(org.bukkit.entity.Player player) {
         Object handle = null;
         try {
-            Method handleMethod = player.getClass().getMethod("getHandle");
-            handle = handleMethod.invoke(player);
+            handle = class_CraftPlayer_getHandleMethod.invoke(player);
         } catch (Throwable ex) {
             ex.printStackTrace();
         }
         return handle;
     }
 
-    protected static Object getHandle(Object object) {
-        Object handle = null;
-        try {
-            Method handleMethod = object.getClass().getMethod("getHandle");
-            handle = handleMethod.invoke(object);
-        } catch (Throwable ex) {
-            ex.printStackTrace();
+    protected static void sendPacket(Server server, Location source, Collection<? extends Player> players, Object packet) throws Exception  {
+        if (players == null || players.size() <= 0) {
+            players = Arrays.asList(server.getOnlinePlayers());
         }
-        return handle;
-    }
-
-    protected static void sendPacket(Server server, Location source, Collection<Player> players, Object packet) throws Exception  {
-        players = ((players != null && players.size() > 0) ? players : CompatibilityUtils.getOnlinePlayers(server));
 
         int viewDistance = Bukkit.getServer().getViewDistance() * 16;
         int viewDistanceSquared =  viewDistance * viewDistance;
@@ -947,6 +991,15 @@ public class NMSUtils {
         return hasMeta(itemStack, "temporary");
     }
 
+
+    public static void makeUnplaceable(ItemStack itemStack) {
+        setMeta(itemStack, "unplaceable", "true");
+    }
+
+    public static boolean isUnplaceable(ItemStack itemStack) {
+        return hasMeta(itemStack, "unplaceable");
+    }
+
     public static String getTemporaryMessage(ItemStack itemStack) {
         return getMeta(itemStack, "temporary");
     }
@@ -1171,8 +1224,11 @@ public class NMSUtils {
     }
 
     public static void clearItems(Location location) {
+        if (location == null) return;
         try {
             World world = location.getWorld();
+            if (world == null) return;
+
             Object tileEntity = class_CraftWorld_getTileEntityAtMethod.invoke(world, location.getBlockX(), location.getBlockY(), location.getBlockZ());
             if (tileEntity != null) {
                 Object entityData = class_NBTTagCompound.newInstance();
@@ -1191,9 +1247,14 @@ public class NMSUtils {
     }
 
     public static void setTileEntityData(Location location, Object data) {
+        if (location == null || data == null) return;
         try {
             World world = location.getWorld();
+            if (world == null) return;
+
             Object tileEntity = class_CraftWorld_getTileEntityAtMethod.invoke(world, location.getBlockX(), location.getBlockY(), location.getBlockZ());
+            if (tileEntity == null) return;
+
             class_NBTTagCompound_setIntMethod.invoke(data, "x", location.getBlockX());
             class_NBTTagCompound_setIntMethod.invoke(data, "y", location.getBlockY());
             class_NBTTagCompound_setIntMethod.invoke(data, "z", location.getBlockZ());
@@ -1207,28 +1268,13 @@ public class NMSUtils {
 
     public static Vector getPosition(Object entityData, String tag) {
         try {
-            Object posList = class_NBTTagCompound_getListMethod.invoke(entityData, "Pos", NBT_TYPE_DOUBLE);
+            Object posList = class_NBTTagCompound_getListMethod.invoke(entityData, tag, NBT_TYPE_DOUBLE);
             Double x = (Double)class_NBTTagList_getDoubleMethod.invoke(posList, 0);
             Double y = (Double)class_NBTTagList_getDoubleMethod.invoke(posList, 1);
             Double z = (Double)class_NBTTagList_getDoubleMethod.invoke(posList, 2);
             if (x != null && y != null && z != null) {
                 return new Vector(x, y, z);
             }
-        } catch (Exception ex) {
-            ex.printStackTrace();
-        }
-        return null;
-    }
-
-    public static Collection<Player> getOnlinePlayers(Server server)
-    {
-        try {
-            Object players = class_Server_getOnlinePlayers.invoke(server);
-            if (players instanceof Collection) {
-                return (List<Player>)players;
-            }
-            Player[] playerArray = (Player[])players;
-            return new ArrayList<Player>(Arrays.asList(playerArray));
         } catch (Exception ex) {
             ex.printStackTrace();
         }

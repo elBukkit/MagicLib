@@ -42,12 +42,11 @@ import java.util.logging.Logger;
 
 public class CastContext implements com.elmakers.mine.bukkit.api.action.CastContext {
     protected static Random random;
-    protected final static int TELEPORT_RETRY_COUNT = 8;
-    protected final static int TELEPORT_RETRY_INTERVAL = 10;
 
     private final Location location;
     private final Entity entity;
     private Location targetLocation;
+    private Location targetSourceLocation;
     private Entity targetEntity;
     private UndoList undoList;
     private String targetName = null;
@@ -70,29 +69,7 @@ public class CastContext implements com.elmakers.mine.bukkit.api.action.CastCont
     private int workAllowed = 500;
     private int actionsPerformed;
 
-    public static double WAND_LOCATION_OFFSET = 0.5;
-
-    protected class TeleportTask implements Runnable {
-        private final CastContext context;
-        private final Entity entity;
-        private final Location location;
-        private final int verticalSearchDistance;
-
-        protected TeleportTask(CastContext context, final Entity entity, final Location location, final int verticalSearchDistance) {
-            this.context = context;
-            this.entity = entity;
-            this.location = location;
-            this.verticalSearchDistance = verticalSearchDistance;
-        }
-
-        @Override
-        public void run() {
-            context.delayedTeleport(entity, location, verticalSearchDistance);
-        }
-    }
-
-    public CastContext(Spell spell) {
-        this.setSpell(spell);
+    public CastContext() {
         this.location = null;
         this.entity = null;
         this.base = this;
@@ -168,16 +145,8 @@ public class CastContext implements com.elmakers.mine.bukkit.api.action.CastCont
 
     @Override
     public Location getWandLocation() {
-        Location wandLocation = getEyeLocation();
-        if (wandLocation == null) {
-            return null;
-        }
-        Location toTheRight = wandLocation.clone();
-        toTheRight.setYaw(toTheRight.getYaw() + 90);
-        Vector wandDirection = toTheRight.getDirection();
-        wandLocation = wandLocation.clone();
-        wandLocation.add(wandDirection.multiply(WAND_LOCATION_OFFSET));
-        return wandLocation;
+        Mage mage = getMage();
+        return mage == null ? getEyeLocation() : mage.getWandLocation();
     }
 
     @Override
@@ -227,6 +196,11 @@ public class CastContext implements com.elmakers.mine.bukkit.api.action.CastCont
     }
 
     @Override
+    public Location getTargetSourceLocation() {
+        return targetSourceLocation == null ? targetLocation : targetSourceLocation;
+    }
+
+    @Override
     public Block getTargetBlock() {
         return targetLocation == null ? null : targetLocation.getBlock();
     }
@@ -256,6 +230,11 @@ public class CastContext implements com.elmakers.mine.bukkit.api.action.CastCont
     @Override
     public void setTargetLocation(Location targetLocation) {
         this.targetLocation = targetLocation;
+    }
+
+    @Override
+    public void setTargetSourceLocation(Location targetLocation) {
+        targetSourceLocation = targetLocation;
     }
 
     @Override
@@ -389,11 +368,12 @@ public class CastContext implements com.elmakers.mine.bukkit.api.action.CastCont
     @Override
     public void playEffects(String effectName, float scale)
     {
-        Location wand = getWandLocation();
-        Location location = getEyeLocation();
         Collection<EffectPlayer> effects = getEffects(effectName);
         if (effects.size() > 0)
         {
+            Location wand = null;
+            Location eyeLocation = getEyeLocation();
+            Location location = getLocation();
             Collection<Entity> targeted = getTargetedEntities();
             Entity sourceEntity = getEntity();
             Entity targetEntity = getTargetEntity();
@@ -412,7 +392,15 @@ public class CastContext implements com.elmakers.mine.bukkit.api.action.CastCont
                 String overrideParticle = spell.getEffectParticle();
                 player.setParticleOverride(overrideParticle);
 
-                Location source = player.shouldUseWandLocation() ? wand : location;
+                Mage mage = getMage();
+                boolean useWand = mage != null && mage.getEntity() == sourceEntity && player.shouldUseWandLocation();
+                Location source = player.shouldUseEyeLocation() ? eyeLocation : location;
+                if (useWand) {
+                    if (wand == null) {
+                        wand = mage.getWandLocation();
+                    }
+                    source = wand;
+                }
                 Location target = targetLocation;
                 if (!player.shouldUseHitLocation() && targetEntity != null) {
                     if (targetEntity instanceof LivingEntity) {
@@ -800,39 +788,8 @@ public class CastContext implements com.elmakers.mine.bukkit.api.action.CastCont
     public void teleport(final Entity entity, final Location location, final int verticalSearchDistance)
     {
         Plugin plugin = getPlugin();
-        Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, new Runnable() {
-            public void run() {
-                delayedTeleport(entity, location, verticalSearchDistance);
-            }
-        }, 1);
-    }
-
-    protected void delayedTeleport(final Entity entity, final Location location, final int verticalSearchDistance)
-    {
-        MageController controller = getController();
-        Chunk chunk = location.getBlock().getChunk();
-        int retryCount = 0;
-        if (!chunk.isLoaded()) {
-            chunk.load(true);
-            if (retryCount < TELEPORT_RETRY_COUNT) {
-                Plugin plugin = controller.getPlugin();
-                Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, new Runnable() {
-                    public void run() {
-                        delayedTeleport(entity, location, verticalSearchDistance);
-                    }
-                }, TELEPORT_RETRY_INTERVAL);
-            }
-            return;
-        }
-
-        playEffects("teleport");
-
-        registerMoved(entity);
-        Location targetLocation = findPlaceToStand(location, verticalSearchDistance);
-        if (targetLocation != null) {
-            setTargetedLocation(targetLocation);
-            entity.teleport(targetLocation);
-        }
+        TeleportTask task = new TeleportTask(getController(), entity, location, verticalSearchDistance, this);
+        Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, task, 1);
     }
 
     @Override

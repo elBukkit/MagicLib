@@ -1,11 +1,10 @@
 package com.elmakers.mine.bukkit.effect;
 
 import java.lang.ref.WeakReference;
-import java.security.InvalidParameterException;
 import java.util.*;
 
 import com.elmakers.mine.bukkit.api.effect.EffectPlay;
-import com.elmakers.mine.bukkit.utility.CompatibilityUtils;
+import com.elmakers.mine.bukkit.utility.SoundEffect;
 import de.slikey.effectlib.util.ParticleEffect;
 import org.bukkit.Bukkit;
 import org.bukkit.Color;
@@ -19,7 +18,6 @@ import org.bukkit.block.Block;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.MemoryConfiguration;
 import org.bukkit.entity.Entity;
-import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.util.Vector;
 
@@ -42,6 +40,7 @@ public abstract class EffectPlayer implements com.elmakers.mine.bukkit.api.effec
         }
     }
 
+    private static Map<String, Class<?>> effectClasses = new HashMap<String, Class<?>>();
     private static EffectLibManager effectLib = null;
     private ConfigurationSection effectLibConfig = null;
     private Collection<EffectPlay> currentEffects = null;
@@ -76,10 +75,7 @@ public abstract class EffectPlayer implements com.elmakers.mine.bukkit.api.effec
     protected Effect effect = null;
     protected Integer effectData = null;
 
-    protected Sound sound = null;
-    protected String customSound = null;
-    protected float soundVolume = 0.7f;
-    protected float soundPitch = 1.5f;
+    protected SoundEffect sound = null;
 
     protected boolean hasFirework = false;
     protected FireworkEffect.Type fireworkType;
@@ -100,6 +96,7 @@ public abstract class EffectPlayer implements com.elmakers.mine.bukkit.api.effec
     protected int particleCount = 1;
 
     protected boolean useWandLocation = true;
+    protected boolean useEyeLocation = true;
     protected boolean useHitLocation = true;
 
     protected float scale = 1.0f;
@@ -171,19 +168,15 @@ public abstract class EffectPlayer implements com.elmakers.mine.bukkit.api.effec
         }
 
         if (configuration.contains("sound")) {
-            String soundName = configuration.getString("sound");
-            try {
-                sound = Sound.valueOf(soundName.toUpperCase());
-            } catch(Exception ex) {
-            }
-            if (sound == null) {
-                plugin.getLogger().warning("Unknown sound type " + soundName);
-            } else {
-                soundVolume = (float)configuration.getDouble("sound_volume", soundVolume);
-                soundPitch = (float)configuration.getDouble("sound_pitch", soundPitch);
-            }
+            sound = new SoundEffect(configuration.getString("sound"));
+        } else if (configuration.contains("custom_sound")) {
+            sound = new SoundEffect(configuration.getString("custom_sound"));
         }
-        customSound = configuration.getString("custom_sound");
+
+        if (sound != null) {
+            sound.setVolume((float)configuration.getDouble("sound_volume", sound.getVolume()));
+            sound.setPitch((float)configuration.getDouble("sound_pitch", sound.getPitch()));
+        }
 
         if (configuration.contains("firework") || configuration.contains("firework_power")) {
             hasFirework = true;
@@ -222,6 +215,7 @@ public abstract class EffectPlayer implements com.elmakers.mine.bukkit.api.effec
 
         setLocationType(configuration.getString("location", "origin"));
         useWandLocation = configuration.getBoolean("use_wand_location", true);
+        useEyeLocation = configuration.getBoolean("use_eye_location", true);
         useHitLocation = configuration.getBoolean("use_hit_location", true);
     }
 
@@ -364,19 +358,7 @@ public abstract class EffectPlayer implements com.elmakers.mine.bukkit.api.effec
             sourceEntity.playEffect(entityEffect);
         }
         if (sound != null) {
-            sourceLocation.getWorld().playSound(sourceLocation, sound, soundVolume, soundPitch);
-        }
-        if (customSound != null) {
-            double range = soundVolume > 1.0 ? (double) (16.0 * soundVolume) : 16.0;
-            Collection<Player> players = CompatibilityUtils.getOnlinePlayers(plugin.getServer());
-            for (Player player : players)
-            {
-                Location location = player.getLocation();
-                if (location.getWorld().equals(sourceLocation.getWorld()) && location.distanceSquared(sourceLocation) <= range)
-                {
-                    player.playSound(sourceLocation, customSound, soundVolume, soundPitch);
-                }
-            }
+            sound.play(plugin, sourceLocation);
         }
         if (fireworkEffect != null) {
             EffectUtils.spawnFireworkEffect(plugin.getServer(), sourceLocation, fireworkEffect, fireworkPower);
@@ -388,16 +370,23 @@ public abstract class EffectPlayer implements com.elmakers.mine.bukkit.api.effec
             if ((useEffect == ParticleEffect.BLOCK_CRACK || useEffect == ParticleEffect.ITEM_CRACK || useEffect == ParticleEffect.BLOCK_DUST) && particleSubType.length() == 0) {
                 Material material = getWorkingMaterial().getMaterial();
 
-                if (useEffect == ParticleEffect.ITEM_CRACK) {
-                    data = new ParticleEffect.ItemData(material, getWorkingMaterial().getBlockData());
-                } else {
-                    data = new ParticleEffect.BlockData(material, getWorkingMaterial().getBlockData());
+                Byte blockData = getWorkingMaterial().getBlockData();
+                if (blockData != null && blockData != 0) {
+                    if (useEffect == ParticleEffect.ITEM_CRACK) {
+                        data = new ParticleEffect.ItemData(material, blockData);
+                    } else {
+                        data = new ParticleEffect.BlockData(material, blockData);
+                    }
+                    try {
+                        useEffect.display(data, sourceLocation, getColor1(), PARTICLE_RANGE, particleXOffset, particleYOffset, particleZOffset, particleData, particleCount);
+                    } catch (Exception ex) {
+                    }
                 }
-            }
-
-            try {
-                useEffect.display(data, sourceLocation, getColor1(), PARTICLE_RANGE, particleXOffset, particleYOffset, particleZOffset, particleData, particleCount);
-            } catch (Exception ex) {
+            } else {
+                try {
+                    useEffect.display(data, sourceLocation, getColor1(), PARTICLE_RANGE, particleXOffset, particleYOffset, particleZOffset, particleData, particleCount);
+                } catch (Exception ex) {
+                }
             }
         }
     }
@@ -435,14 +424,14 @@ public abstract class EffectPlayer implements com.elmakers.mine.bukkit.api.effec
 
     @Override
     public void setSound(Sound sound) {
-        this.sound = sound;
+        this.sound = new SoundEffect(sound);
     }
 
     @Override
     public void setSound(Sound sound, float volume, float pitch) {
-        this.sound = sound;
-        this.soundVolume = volume;
-        this.soundPitch = pitch;
+        this.sound = new SoundEffect(sound);
+        this.sound.setVolume(volume);
+        this.sound.setPitch(pitch);
     }
 
     public void setDelayTicks(int ticks) {
@@ -593,7 +582,11 @@ public abstract class EffectPlayer implements com.elmakers.mine.bukkit.api.effec
                         if (!effectClass.contains(".")) {
                             effectClass = EFFECT_BUILTIN_CLASSPATH + "." + effectClass;
                         }
-                        Class<?> genericClass = Class.forName(effectClass);
+                        Class<?> genericClass = effectClasses.get(effectClass);
+                        if (genericClass == null) {
+                            genericClass = Class.forName(effectClass);
+                            effectClasses.put(effectClass, genericClass);
+                        }
                         if (!EffectPlayer.class.isAssignableFrom(genericClass)) {
                             throw new Exception("Must extend EffectPlayer");
                         }
@@ -631,5 +624,10 @@ public abstract class EffectPlayer implements com.elmakers.mine.bukkit.api.effec
     @Override
     public boolean shouldUseWandLocation() {
         return useWandLocation;
+    }
+
+    @Override
+    public boolean shouldUseEyeLocation() {
+        return useEyeLocation;
     }
 }

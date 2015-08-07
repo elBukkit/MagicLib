@@ -271,6 +271,12 @@ public class ConfigurationUtils {
          }
      }
 
+    public static ConfigurationSection cloneConfiguration(ConfigurationSection section)
+    {
+        return addConfigurations(new MemoryConfiguration(), section);
+    }
+
+
     public static ConfigurationSection addConfigurations(ConfigurationSection first, ConfigurationSection second)
     {
         return addConfigurations(first, second, true);
@@ -426,8 +432,7 @@ public class ConfigurationUtils {
             direction.setY(overrideDouble(node, direction.getY(), dyName));
             direction.setZ(overrideDouble(node, direction.getZ(), dzName));
 
-            // TODO: Use location.setDirection in 1.7+
-            CompatibilityUtils.setDirection(location, direction);
+            location.setDirection(direction);
         }
 
         return location;
@@ -628,23 +633,7 @@ public class ConfigurationUtils {
     }
 
     public static SoundEffect toSoundEffect(String soundConfig) {
-        SoundEffect soundEffect = null;
-        if (soundConfig != null && soundConfig.length() > 0) {
-            String[] pieces = StringUtils.split(soundConfig, ',');
-            try {
-                String soundName = pieces[0].toUpperCase();
-                soundEffect = new SoundEffect(Sound.valueOf(soundName));
-                if (pieces.length > 1) {
-                    soundEffect.setVolume(Float.parseFloat(pieces[1]));
-                }
-                if (pieces.length > 2) {
-                    soundEffect.setPitch(Float.parseFloat(pieces[2]));
-                }
-            } catch (Exception ex) {
-            }
-        }
-
-        return soundEffect;
+        return new SoundEffect(soundConfig);
     }
 
     public static ParticleEffect toParticleEffect(String effectParticleName) {

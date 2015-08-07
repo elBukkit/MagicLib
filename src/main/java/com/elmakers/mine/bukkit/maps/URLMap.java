@@ -25,6 +25,7 @@ import javax.imageio.metadata.IIOMetadataNode;
 import javax.imageio.stream.ImageInputStream;
 
 import org.bukkit.Bukkit;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.map.MapCanvas;
 import org.bukkit.map.MapRenderer;
@@ -93,7 +94,7 @@ public class URLMap extends MapRenderer implements com.elmakers.mine.bukkit.api.
         }
 
         if (rendered) {
-            if (priority != null) {
+            if (priority != null && player != null) {
                 sendToPlayer(player, mapView);
             }
             return;
@@ -134,16 +135,44 @@ public class URLMap extends MapRenderer implements com.elmakers.mine.bukkit.api.
     }
 
     @SuppressWarnings("deprecation")
+    @Override
+    public boolean fix(World world, int maxIds) {
+        if (enabled) return true;
+
+        MapView mapView = Bukkit.getMap(id);
+        if (mapView != null) {
+            enabled = true;
+            return true;
+        }
+        int retry = 0;
+        boolean matched = false;
+        while (!matched && retry < maxIds) {
+            MapView newView = Bukkit.createMap(world);
+            short newId = newView.getId();
+            matched = (newView != null && newId == id);
+            if (newId < 0 || newId > id) break;
+            retry++;
+        }
+
+        mapView = getMapView();
+        if (mapView == null) {
+            controller.warning("Failed to fix map id " + id + " for key " + getKey());
+        } else {
+            enabled = true;
+        }
+
+        return enabled;
+    }
+
+    @SuppressWarnings("deprecation")
     protected MapView getMapView() {
         if (!enabled) {
             return null;
         }
         MapView mapView = Bukkit.getMap(id);
         if (mapView == null) {
-            controller.remove(getKey());
             enabled = false;
-            controller.warning("Failed to get map id " + id + " for key " + getKey() + ", disabled, re-enable in config and fix id");
-            controller.save();
+            controller.warning("Failed to get map id " + id + " for key " + getKey() + ", disabled, use 'mmap fix' to re-enable");
             return null;
         }
         List<MapRenderer> renderers = mapView.getRenderers();
@@ -164,7 +193,8 @@ public class URLMap extends MapRenderer implements com.elmakers.mine.bukkit.api.
         enabled = false;
     }
 
-    protected boolean isEnabled() {
+    @Override
+    public boolean isEnabled() {
         return enabled;
     }
 
@@ -317,8 +347,13 @@ public class URLMap extends MapRenderer implements com.elmakers.mine.bukkit.api.
                         Collection<BufferedImage> images = null;
                         if (!url.startsWith("http"))
                         {
-                            File baseFolder = plugin.getDataFolder().getParentFile().getParentFile();
-                            File fileName = new File(baseFolder, url);
+                            File fileName;
+                            if (!url.startsWith("/")) {
+                                File baseFolder = plugin.getDataFolder().getParentFile().getParentFile();
+                                fileName = new File(baseFolder, url);
+                            } else {
+                                fileName = new File(url);
+                            }
                             controller.info("Loading map file: " + fileName.getName());
                             images = loadImages(ImageIO.createImageInputStream(fileName));
                         }
@@ -391,7 +426,6 @@ public class URLMap extends MapRenderer implements com.elmakers.mine.bukkit.api.
                         loading = false;
                     } catch (Exception ex) {
                         controller.warning("Failed to load map " + url + ": " + ex.getMessage());
-                        ex.printStackTrace();
                     }
                 }
             });

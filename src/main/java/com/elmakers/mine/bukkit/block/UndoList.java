@@ -11,7 +11,8 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.elmakers.mine.bukkit.api.action.CastContext;
-import com.elmakers.mine.bukkit.spell.UndoableSpell;
+import com.elmakers.mine.bukkit.api.batch.Batch;
+import com.elmakers.mine.bukkit.api.spell.Spell;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -43,10 +44,12 @@ public class UndoList extends BlockList implements com.elmakers.mine.bukkit.api.
 {
     public static Set<Material>         attachables;
     public static Set<Material>         attachablesWall;
+    public static Set<Material>         attachablesDouble;
 
     protected static Map<Long, BlockData> modified = new HashMap<Long, BlockData>();
 
     protected HashSet<Long>         attached;
+    private boolean                 loading = false;
 
     protected List<WeakReference<Entity>> 	entities;
     protected List<Runnable>				runnables;
@@ -64,10 +67,12 @@ public class UndoList extends BlockList implements com.elmakers.mine.bukkit.api.
     protected long					modifiedTime;
     protected long                  scheduledTime;
 
-    // Doubly-linked list
-    protected UndoableSpell         spell;
+    protected Spell                 spell;
+    protected Batch                 batch;
     protected CastContext           context;
     protected UndoQueue             undoQueue;
+
+    // Doubly-linked list
     protected UndoList              next;
     protected UndoList              previous;
 
@@ -92,7 +97,13 @@ public class UndoList extends BlockList implements com.elmakers.mine.bukkit.api.
         modifiedTime = createdTime;
     }
 
-    public void setSpell(UndoableSpell spell)
+    public void setBatch(Batch batch)
+    {
+        this.batch = batch;
+    }
+
+    @Override
+    public void setSpell(Spell spell)
     {
         this.spell = spell;
         this.context = spell == null ? null : spell.getCurrentCast();
@@ -162,17 +173,20 @@ public class UndoList extends BlockList implements com.elmakers.mine.bukkit.api.
     @Override
     public boolean add(BlockData blockData)
     {
+        if (bypass) return true;
         if (!super.add(blockData)) {
             return false;
         }
-        if (attached != null) {
-            attached.remove(blockData.getId());
-        }
         modifiedTime = System.currentTimeMillis();
-        if (bypass) return true;
 
         register(blockData);
         blockData.setUndoList(this);
+
+        if (loading) return true;
+
+        if (attached != null) {
+            attached.remove(blockData.getId());
+        }
 
         addAttachable(blockData, BlockFace.NORTH, attachablesWall);
         addAttachable(blockData, BlockFace.SOUTH, attachablesWall);
@@ -211,6 +225,17 @@ public class UndoList extends BlockList implements com.elmakers.mine.bukkit.api.
                     attached = new HashSet<Long>();
                 }
                 attached.add(blockId);
+                if (attachablesDouble != null && attachablesDouble.contains(material))
+                {
+                    if (direction != BlockFace.UP)
+                    {
+                        addAttachable(newBlock, BlockFace.DOWN, materials);
+                    }
+                    else if (direction != BlockFace.DOWN)
+                    {
+                        addAttachable(newBlock, BlockFace.UP, materials);
+                    }
+                }
                 return true;
             }
         }
@@ -336,7 +361,19 @@ public class UndoList extends BlockList implements com.elmakers.mine.bukkit.api.
 
     public void undo(boolean blocking)
     {
+        if (spell != null)
+        {
+            spell.cancel();
+        }
+        if (batch != null && !batch.isFinished())
+        {
+            batch.finish();
+        }
         undo(blocking, true);
+        if (isScheduled())
+        {
+            owner.getController().cancelScheduledUndo(this);
+        }
     }
 
     public void undoScheduled(boolean blocking)
@@ -388,7 +425,9 @@ public class UndoList extends BlockList implements com.elmakers.mine.bukkit.api.
     @Override
     public void load(ConfigurationSection node)
     {
+        loading = true;
         super.load(node);
+        loading = false;
         timeToLive = node.getInt("time_to_live", timeToLive);
         name = node.getString("name", name);
         applyPhysics = node.getBoolean("apply_physics", applyPhysics);
@@ -439,7 +478,7 @@ public class UndoList extends BlockList implements com.elmakers.mine.bukkit.api.
     public EntityData modify(Entity entity)
     {
         EntityData entityData = null;
-        if (entity == null) return entityData;
+        if (entity == null || entity.hasMetadata("notarget")) return entityData;
         if (worldName != null && !entity.getWorld().getName().equals(worldName)) return entityData;
         if (worldName == null) worldName = entity.getWorld().getName();
 
@@ -458,6 +497,18 @@ public class UndoList extends BlockList implements com.elmakers.mine.bukkit.api.
         modifiedTime = System.currentTimeMillis();
 
         return entityData;
+    }
+
+    @Override
+    public EntityData damage(Entity entity, double damage) {
+        EntityData data = modify(entity);
+        // Kind of a hack to prevent dropping things we're going to undo later
+        if (undoEntityTypes != null && undoEntityTypes.contains(entity.getType()))
+        {
+            data.removed(entity);
+            entity.remove();
+        }
+        return data;
     }
 
     @Override
@@ -606,7 +657,7 @@ public class UndoList extends BlockList implements com.elmakers.mine.bukkit.api.
         return name;
     }
 
-    public UndoableSpell getSpell()
+    public Spell getSpell()
     {
         return spell;
     }

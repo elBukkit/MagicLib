@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Set;
 
+import com.elmakers.mine.bukkit.api.action.CastContext;
 import com.elmakers.mine.bukkit.api.spell.Spell;
 import org.apache.commons.lang.ArrayUtils;
 import org.bukkit.Material;
@@ -40,6 +41,7 @@ public class UndoBatch implements com.elmakers.mine.bukkit.api.batch.UndoBatch {
         // Maybe eventually we'll have a "redo" queue.
         trackUndoBlocks = new UndoList(mage, "Undo");
         trackUndoBlocks.setSpell(blockList.getSpell());
+        trackUndoBlocks.setBatch(this);
         trackUndoBlocks.setBypass(true);
 
         undoList = blockList;
@@ -114,9 +116,9 @@ public class UndoBatch implements com.elmakers.mine.bukkit.api.batch.UndoBatch {
             undoList.undoEntityEffects();
             finished = true;
             controller.update(trackUndoBlocks);
-            Spell spell = undoList.getSpell();
-            if (spell != null) {
-                spell.playEffects("undo");
+            CastContext context = undoList.getContext();
+            if (context != null) {
+                context.playEffects("undo");
             }
         }
     }
