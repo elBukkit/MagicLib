@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## CB 1.2
+
+ - Fix errors with hitboxes and magic damage
+
 ## 3.0
 
  - MagicLib now builds against Bukkit API 1.8

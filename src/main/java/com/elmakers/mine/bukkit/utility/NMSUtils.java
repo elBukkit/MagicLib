@@ -163,7 +163,6 @@ public class NMSUtils {
     protected static Method class_Entity_getIdMethod;
     protected static Method class_Entity_getDataWatcherMethod;
     protected static Method class_Server_getOnlinePlayers;
-    protected static Method class_Entity_getBoundingBox;
     protected static Method class_TileEntityContainer_setLock;
     protected static Method class_TileEntityContainer_getLock;
     protected static Method class_ChestLock_isEmpty;
@@ -224,6 +223,7 @@ public class NMSUtils {
     protected static Field class_PlayerConnection_floatCountField;
     protected static Field class_Chunk_doneField;
     protected static Field class_CraftItemStack_getHandleField;
+    protected static Field class_Entity_boundingBoxField;
 
     static
     {
@@ -386,6 +386,7 @@ public class NMSUtils {
             class_Chunk_doneField.setAccessible(true);
             class_CraftItemStack_getHandleField = class_CraftItemStack.getDeclaredField("handle");
             class_CraftItemStack_getHandleField.setAccessible(true);
+            class_Entity_boundingBoxField = class_Entity.getDeclaredField("boundingBox");
 
             isLegacy = false;
             try {
@@ -395,7 +396,6 @@ public class NMSUtils {
                 class_TileEntityContainer_getLock = class_TileEntityContainer.getMethod("i");
                 class_ChestLock_isEmpty = class_ChestLock.getMethod("a");
                 class_ChestLock_getString = class_ChestLock.getMethod("b");
-                class_Entity_getBoundingBox = class_Entity.getMethod("getBoundingBox");
                 class_GameProfile = getClass("com.mojang.authlib.GameProfile");
                 class_GameProfileProperty = getClass("com.mojang.authlib.properties.Property");
                 class_CraftSkull_profile = class_CraftSkull.getDeclaredField("profile");

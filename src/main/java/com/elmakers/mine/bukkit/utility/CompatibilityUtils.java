@@ -464,7 +464,8 @@ public class CompatibilityUtils extends NMSUtils {
 
                 // This is a bit of hack that lets us damage the ender dragon, who is a weird and annoying collection
                 // of various non-living entity pieces.
-                class_EntityDamageSource_setThornsMethod.invoke(damageSource);
+                // Broken in 1.7, so nah.
+                // class_EntityDamageSource_setThornsMethod.invoke(damageSource);
 
                 class_EntityLiving_damageEntityMethod.invoke(targetHandle, damageSource, (float)amount);
             } else {
@@ -604,7 +605,7 @@ public class CompatibilityUtils extends NMSUtils {
 
         try {
             Object entityHandle = getHandle(entity);
-            Object aabb = class_Entity_getBoundingBox.invoke(entityHandle);
+            Object aabb = class_Entity_boundingBoxField.get(entityHandle);
             if (aabb == null) {
                 return defaultHitbox.center(entity.getLocation().toVector());
             }
